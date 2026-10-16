@@ -1,0 +1,14 @@
+.gradle/
+build/
+run/
+run-data/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+logs/
+.mixin.out/
+*.log
+*.jar
+!gradle/wrapper/gradle-wrapper.jar

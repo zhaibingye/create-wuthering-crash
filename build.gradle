@@ -1,0 +1,100 @@
+plugins {
+    id 'java'
+    id 'net.minecraftforge.gradle' version '6.0.54'
+}
+
+group = 'com.yuanmomingshu'
+version = mod_version
+base.archivesName = "${mod_id}"
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+    runs {
+        client {
+            workingDirectory project.file('run')
+            mods {
+                "${mod_id}" { source sourceSets.main }
+            }
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation('net.minecraft:launchwrapper:1.12') { transitive = false }
+}
+
+// Optional external fixtures are supplied by path; the repository is self-contained.
+def genshinModJar = providers.gradleProperty('genshinModJar')
+def oldFixJar = providers.gradleProperty('oldFixJar')
+['absent', 'new-only', 'new-first', 'old-first', 'server'].each { scenario ->
+    def needsOriginal = scenario != 'absent'
+    def needsOldFix = scenario in ['new-first', 'old-first']
+    tasks.register("verifyMixin_${scenario.replace('-', '_')}", JavaExec) {
+        dependsOn testClasses, reobfJar
+        classpath = sourceSets.test.runtimeClasspath
+        mainClass = 'verification.MixinSmokeMain'
+        onlyIf('optional external mod JARs were supplied') {
+            (!needsOriginal || genshinModJar.isPresent()) && (!needsOldFix || oldFixJar.isPresent())
+        }
+        doFirst {
+            if (needsOriginal && !file(genshinModJar.get()).isFile()) {
+                throw new GradleException('genshinModJar does not point to a JAR file')
+            }
+            if (needsOldFix && !file(oldFixJar.get()).isFile()) {
+                throw new GradleException('oldFixJar does not point to a JAR file')
+            }
+            setArgs([scenario, tasks.jar.archiveFile.get().asFile.absolutePath,
+                    genshinModJar.map { file(it).absolutePath }.getOrElse(''),
+                    oldFixJar.map { file(it).absolutePath }.getOrElse('')])
+        }
+        jvmArgs '-Dfile.encoding=UTF-8'
+    }
+}
+
+tasks.register('verifyMixin') {
+    dependsOn tasks.matching { it.name.startsWith('verifyMixin_') }
+    doLast {
+        if (!genshinModJar.isPresent() || !oldFixJar.isPresent()) {
+            logger.lifecycle('External JAR scenarios are optional. Supply -PgenshinModJar=<path> and -PoldFixJar=<path> to enable all checks.')
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    filteringCharset = 'UTF-8'
+    inputs.property 'mod_version', mod_version
+    filesMatching('META-INF/mods.toml') {
+        expand mod_version: mod_version
+    }
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    include '**/*Test.class'
+}
+
+tasks.named('jar', Jar).configure {
+    archiveFileName = "${mod_id}-${mod_version}-forge-${minecraft_version}.jar"
+    manifest {
+        attributes 'MixinConfigs': 'mixins.create_wuthering_waves_crash.json',
+                'Implementation-Title': '机械动力：原末鸣初',
+                'Implementation-Version': project.version
+    }
+    from('LICENSE')
+    from('licenses') { into 'licenses' }
+    finalizedBy 'reobfJar'
+}

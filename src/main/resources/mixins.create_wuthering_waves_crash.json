@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.yuanmomingshu.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [],
+  "client": [
+    "DownloadGenshinProcedureMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
